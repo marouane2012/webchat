@@ -20,13 +20,13 @@ body {
 <body>
 <h1>Welcome to Webchat!</h1>
 Enter room:
-<form>
+<form id="roomform">
 <input type="text" id="rcinput" placeholder="Code" maxlength="4" minlength="4" required>
 <input type="submit" id="submitrc" value="Enter">
 </form>
 <script>
     const rcinputevents = document.getElementById('rcinput');
-    const sb = document.getElementById('submitrc')
+    const sb = document.getElementById('roomform')
     rcinputevents.addEventListener('input', () => {rcinputevents.value = rcinputevents.value.toUpperCase().replace(/[^A-Z]/g, '');});
     sb.addEventListener('submit', (event) => {
         event.preventDefault();
