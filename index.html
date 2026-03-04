@@ -6,7 +6,7 @@
 .box {
     background-color: #f1f900;
     width: 300px;
-    height: 200px;
+    height: 300px;
     border: 8px solid black;
     padding: 50px;
     margin: 25px;
@@ -24,9 +24,11 @@ Enter room:
 <input type="text" id="rcinput" placeholder="Code" maxlength="4" minlength="4" required>
 <input type="submit" id="submitrc" value="Enter">
 </form>
+<h2 id=roomtext>Chat room AAAA</h2>
 <script>
     const rcinputevents = document.getElementById('rcinput');
     const sb = document.getElementById('roomform')
+    let room = 'AAAA'
     rcinputevents.addEventListener('input', () => {rcinputevents.value = rcinputevents.value.toUpperCase().replace(/[^A-Z]/g, '');});
     sb.addEventListener('submit', (event) => {
         if (rcinputevents.value.length < 4) {
@@ -34,7 +36,8 @@ Enter room:
             return;
         }
         event.preventDefault();
-        alert(rcinputevents.value);});
+        room = rcinputevents.value;
+        document.getElementById('roomtext').textContent = 'Chat room ${room}'
 </script>
 </body>
 </html>
