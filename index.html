@@ -29,10 +29,14 @@ Enter room:
     <p>here</p>
 </div>
 <input type="text" id="msginput" placeholder="Message" maxlength="2048" required>
+<button id="buttom" onclick=sendmsg()>Send message</button>
 <script>
     const rcinputevents = document.getElementById('rcinput');
     const sb = document.getElementById('roomform')
     let room = 'AAAA'
+    function sendmsg() {
+        return;
+    }
     rcinputevents.addEventListener('input', () => {rcinputevents.value = rcinputevents.value.toUpperCase().replace(/[^A-Z]/g, '');});
     sb.addEventListener('submit', (event) => {
         if (rcinputevents.value.length < 4) {
