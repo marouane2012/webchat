@@ -32,12 +32,14 @@ Enter room:
 <button id="buttom" onclick=sendmsg()>Send message</button>
 <script>
     const rcinputevents = document.getElementById('rcinput');
+    const msginputevents = document.getElementById('msginput');
     const sb = document.getElementById('roomform')
     let room = 'AAAA'
     function sendmsg() {
         return;
     }
     rcinputevents.addEventListener('input', () => {rcinputevents.value = rcinputevents.value.toUpperCase().replace(/[^A-Z]/g, '');});
+    msginputevents.addEventListener('input', () => {msginputevents.value = msginputevents.value.replace(/<(?!br\s*\/?)[^>]+>/gi, '');});
     sb.addEventListener('submit', (event) => {
         if (rcinputevents.value.length < 4) {
             alert('Error');
