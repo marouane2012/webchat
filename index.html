@@ -29,6 +29,10 @@ Enter room:
     const sb = document.getElementById('roomform')
     rcinputevents.addEventListener('input', () => {rcinputevents.value = rcinputevents.value.toUpperCase().replace(/[^A-Z]/g, '');});
     sb.addEventListener('submit', (event) => {
+        if (rcinputevents.value.length < 4) {
+            alert('Error');
+            return;
+        }
         event.preventDefault();
         alert(rcinputevents.value);});
 </script>
