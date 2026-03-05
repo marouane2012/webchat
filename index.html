@@ -35,8 +35,8 @@ Enter room:
     const supabasecl = supabase.createClient('https://fujeqhjyqskjrspvktxc.supabase.co', 'sb_publishable_f7pN-7-I7Qx66e6c0GGy2g_j-YpYLhv')
     const rcinputevents = document.getElementById('rcinput');
     const msginputevents = document.getElementById('msginput');
-    const sb = document.getElementById('roomform')
-    let room = 'AAAA'
+    const sb = document.getElementById('roomform');
+    let room = 'AAAA';
     async function loadmsgs(rcode) {
         const { data, error } = await supabasecl
             .from('msgs')
