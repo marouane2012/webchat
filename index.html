@@ -51,6 +51,28 @@ Enter room:
         let formatteddata = liveuddata.join('');
         document.getElementById('chatbox').innerHTML = formatteddata;
     }
+    let subscribedto = null
+    function stroom(rcode) {
+        if (subscribedto) {
+            subscribedto.unsubscribe();
+        }
+        subscribedto = supabasecl
+            .channel('roommsgs')
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'msgs',
+                    filter: `room=eq.${rcode}`
+                },
+                (payload) => {
+                    const newmsg = payload.new;
+                    document.getElementById('chatbox').innerHTML += `<p>${newmsg.text}</p>`;
+                }
+            )
+            .subscribe();
+    }
     async function sendmsg() {
         const msgtext = msginputevents.value.trim();
         if (!msgtext) return;
@@ -65,16 +87,18 @@ Enter room:
         }
     }
     loadmsgs(room);
+    stroom(room);
     rcinputevents.addEventListener('input', () => {rcinputevents.value = rcinputevents.value.toUpperCase().replace(/[^A-Z]/g, '');});
     msginputevents.addEventListener('input', () => {msginputevents.value = msginputevents.value.replace(/<(?!br\s*\/?)[^>]+>/gi, '');});
     sb.addEventListener('submit', (event) => {
-        if (rcinputevents.value.length < 4) {
+        if (rcinputevents.value.length != 4) {
             alert('Error');
             return;
         }
         event.preventDefault();
         room = rcinputevents.value;
         loadmsgs(room);
+        stroom(room);
         document.getElementById('roomtext').textContent = `Chat room ${room}`;});
 </script>
 </body>
