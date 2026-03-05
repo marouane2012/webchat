@@ -16,6 +16,7 @@ body {
     font-family: "Arial", sans-serif;
 }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 <h1>Welcome to Webchat!</h1>
@@ -25,19 +26,45 @@ Enter room:
 <input type="submit" id="submitrc" value="Enter">
 </form>
 <h2 id=roomtext>Chat room AAAA</h2>
-<div class="box">
+<div class="box" id="chatbox">
     <p>here</p>
 </div>
 <input type="text" id="msginput" placeholder="Message" maxlength="2048" required>
 <button id="buttom" onclick=sendmsg()>Send message</button>
 <script>
+    const supabasecl = supabase.createClient('https://fujeqhjyqskjrspvktxc.supabase.co', 'sb_publishable_f7pN-7-I7Qx66e6c0GGy2g_j-YpYLhv')
     const rcinputevents = document.getElementById('rcinput');
     const msginputevents = document.getElementById('msginput');
     const sb = document.getElementById('roomform')
     let room = 'AAAA'
-    function sendmsg() {
-        return;
+    async function loadmsgs(rcode) {
+        const { data, error } = await supabasecl
+            .from('msgs')
+            .select()
+            .eq('room', rcode)
+            .order('created_at', {ascending: true});
+        if (error) {
+            alert('Error');
+            return;
+        }
+        let liveuddata = data.map(msg => `<p>${msg.text}</p>`);
+        let formatteddata = liveuddata.join('');
+        document.getElementById('chatbox').innerHTML = formatteddata;
     }
+    async function sendmsg() {
+        const msgtext = msginputevents.value.trim();
+        if (!msgtext) return;
+        const {error} = await supabasecl
+            .from('msgs')
+            .insert({text: msgtext, room: room});
+        if (error) {
+            alert('Error');
+            return;
+        } else {
+            msginputevents.value = '';
+        }
+    }
+    loadmsgs(room);
     rcinputevents.addEventListener('input', () => {rcinputevents.value = rcinputevents.value.toUpperCase().replace(/[^A-Z]/g, '');});
     msginputevents.addEventListener('input', () => {msginputevents.value = msginputevents.value.replace(/<(?!br\s*\/?)[^>]+>/gi, '');});
     sb.addEventListener('submit', (event) => {
@@ -47,6 +74,7 @@ Enter room:
         }
         event.preventDefault();
         room = rcinputevents.value;
+        loadmsgs(room);
         document.getElementById('roomtext').textContent = `Chat room ${room}`;});
 </script>
 </body>
