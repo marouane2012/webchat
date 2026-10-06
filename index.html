@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="utf-8">
 <title>Webchat</title>
 <style>
 .box {
@@ -16,8 +17,31 @@ body {
     background: linear-gradient(90deg, yellow, lime);
     font-family: "Arial", sans-serif;
 }
+#chatbox p {
+    margin: 0 0 10px 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+#chatbox img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 4px 0;
+}
+#chatbox a { color: #0033cc; }
+#msginput {
+    width: 320px;
+    height: 60px;
+    font-family: inherit;
+    font-size: 14px;
+    vertical-align: top;
+    box-sizing: border-box;
+    resize: vertical;
+}
+button { font-family: inherit; }
+.hint { font-size: 12px; color: #222; margin-top: 6px; }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 <h1>Welcome to Webchat!</h1>
@@ -26,81 +50,315 @@ Enter room:
 <input type="text" id="rcinput" placeholder="Code" maxlength="4" minlength="4" required>
 <input type="submit" id="submitrc" value="Enter">
 </form>
-<h2 id=roomtext>Chat room AAAA</h2>
-<div class="box" id="chatbox">
-    <p>here</p>
-</div>
-<input type="text" id="msginput" placeholder="Message" maxlength="2048" required>
-<button id="buttom" onclick=sendmsg()>Send message</button>
+<h2 id="roomtext">Chat room AAAA</h2>
+<div class="box" id="chatbox"></div>
+<textarea id="msginput" placeholder="Message (Enter to send, Shift+Enter for a new line)" maxlength="2048"></textarea>
+<button id="sendbtn" type="button">Send message</button>
+<button id="imgbtn" type="button">Send image</button>
+<input type="file" id="fileinput" accept="image/*" style="display:none">
+<div class="hint">Images: max 100&nbsp;kB, one upload per minute. You can also just paste a direct image link.</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-    const supabasecl = supabase.createClient('https://fujeqhjyqskjrspvktxc.supabase.co', 'sb_publishable_f7pN-7-I7Qx66e6c0GGy2g_j-YpYLhv')
-    const rcinputevents = document.getElementById('rcinput');
-    const msginputevents = document.getElementById('msginput');
-    const sb = document.getElementById('roomform');
-    let room = 'AAAA';
-    async function loadmsgs(rcode) {
-        const { data, error } = await supabasecl
-            .from('msgs')
-            .select()
-            .eq('room', rcode)
-            .order('created_at', {ascending: true});
-        if (error) {
-            alert('Error');
-            return;
+const supabasecl = supabase.createClient(
+    'https://fujeqhjyqskjrspvktxc.supabase.co',
+    'sb_publishable_f7pN-7-I7Qx66e6c0GGy2g_j-YpYLhv'
+);
+
+const chatbox       = document.getElementById('chatbox');
+const roomtext      = document.getElementById('roomtext');
+const rcinputevents = document.getElementById('rcinput');
+const msginputevents= document.getElementById('msginput');
+const roomform      = document.getElementById('roomform');
+const sendbtn       = document.getElementById('sendbtn');
+const imgbtn        = document.getElementById('imgbtn');
+const fileinput     = document.getElementById('fileinput');
+
+let room = 'AAAA';
+let subscribedto = null;
+let subToken = 0;
+let loadToken = 0;
+let loading = false;
+let pending = [];
+let sending = false;
+let uploading = false;
+
+const MAX_IMAGE_BYTES   = 100 * 1024;
+const UPLOAD_COOLDOWN_MS = 60000;
+const LAST_UPLOAD_KEY   = 'webchat:lastUpload';
+
+/* ---------------- rendering (safe, no innerHTML) ---------------- */
+
+const IMAGE_URL_RE = /^https?:\/\/[^\s]+\.(?:png|jpe?g|gif|webp|bmp|svg|avif)(?:[?#][^\s]*)?$/i;
+const URL_RE = /https?:\/\/[^\s<>"'`]+/g;
+
+function makeLink(url) {
+    const a = document.createElement('a');
+    a.href = url;                 // only http/https reach here
+    a.textContent = url;          // textContent -> no HTML injection
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    return a;
+}
+
+function trimTrailingPunctuation(url) {
+    let end = url.length;
+    while (end > 0 && '.,;:!?)]}\'"'.indexOf(url.charAt(end - 1)) !== -1) end--;
+    return url.slice(0, end);
+}
+
+function appendLinkified(parent, text) {
+    URL_RE.lastIndex = 0;
+    let last = 0;
+    let m;
+    while ((m = URL_RE.exec(text)) !== null) {
+        const url = trimTrailingPunctuation(m[0]);
+        if (url.length < 10) continue;           // "https://" + nothing useful
+        if (m.index > last) {
+            parent.appendChild(document.createTextNode(text.slice(last, m.index)));
         }
-        let liveuddata = data.map(msg => `<p>${msg.text}</p>`);
-        let formatteddata = liveuddata.join('');
-        document.getElementById('chatbox').innerHTML = formatteddata;
+        parent.appendChild(makeLink(url));
+        last = m.index + url.length;
+        URL_RE.lastIndex = last;
     }
-    let subscribedto = null
-    function stroom(rcode) {
-        if (subscribedto) {
-            subscribedto.unsubscribe();
-        }
-        subscribedto = supabasecl
-            .channel('roommsgs')
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'msgs',
-                    filter: `room=eq.${rcode}`
-                },
-                (payload) => {
-                    const newmsg = payload.new;
-                    document.getElementById('chatbox').innerHTML += `<p>${newmsg.text}</p>`;
-                }
-            )
-            .subscribe();
+    if (last < text.length) {
+        parent.appendChild(document.createTextNode(text.slice(last)));
     }
-    async function sendmsg() {
-        const msgtext = msginputevents.value.trim();
-        if (!msgtext) return;
-        const {error} = await supabasecl
-            .from('msgs')
-            .insert({text: msgtext, room: room});
-        if (error) {
-            alert('Error');
-            return;
-        } else {
-            msginputevents.value = '';
-        }
+}
+
+function buildMessageEl(text) {
+    const p = document.createElement('p');
+    const raw = (text == null ? '' : String(text));
+    const trimmed = raw.trim();
+
+    if (IMAGE_URL_RE.test(trimmed)) {
+        const img = document.createElement('img');
+        img.alt = 'image';
+        img.loading = 'lazy';
+        img.referrerPolicy = 'no-referrer';
+        img.onerror = function () {
+            if (img.parentNode) img.parentNode.replaceChild(makeLink(trimmed), img);
+        };
+        img.src = trimmed;
+        p.appendChild(img);
+        return p;
     }
+
+    appendLinkified(p, raw);
+    return p;
+}
+
+function isNearBottom() {
+    return chatbox.scrollHeight - chatbox.scrollTop - chatbox.clientHeight < 80;
+}
+
+function appendMessage(text) {
+    const stick = isNearBottom();
+    chatbox.appendChild(buildMessageEl(text));
+    if (stick) chatbox.scrollTop = chatbox.scrollHeight;
+}
+
+/* ---------------- loading + realtime ---------------- */
+
+async function loadmsgs(rcode) {
+    const token = ++loadToken;
+    loading = true;
+    pending = [];
+
+    const { data, error } = await supabasecl
+        .from('msgs')
+        .select()
+        .eq('room', rcode)
+        .order('created_at', { ascending: true });
+
+    if (token !== loadToken) return;   // a newer load started; drop this one
+    if (error) {
+        loading = false;
+        alert('Error loading messages');
+        return;
+    }
+
+    chatbox.textContent = '';
+    (data || []).forEach(function (msg) {
+        chatbox.appendChild(buildMessageEl(msg.text));
+    });
+
+    loading = false;
+    pending.forEach(function (t) { chatbox.appendChild(buildMessageEl(t)); });
+    pending = [];
+    chatbox.scrollTop = chatbox.scrollHeight;
+}
+
+async function stroom(rcode) {
+    const token = ++subToken;
+
+    if (subscribedto) {
+        const old = subscribedto;
+        subscribedto = null;
+        try { await supabasecl.removeChannel(old); } catch (e) {}
+    }
+    if (token !== subToken) return;   // room changed while unsubscribing
+
+    subscribedto = supabasecl
+        .channel('roommsgs-' + rcode)
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'msgs',
+                filter: 'room=eq.' + rcode
+            },
+            function (payload) {
+                const t = payload.new ? payload.new.text : '';
+                if (loading) { pending.push(t); return; }
+                appendMessage(t);
+            }
+        )
+        .subscribe();
+}
+
+/* ---------------- sending ---------------- */
+
+async function sendmsg() {
+    const msgtext = msginputevents.value.trim();
+    if (!msgtext || sending) return;
+
+    msginputevents.value = '';
+    sending = true;
+    sendbtn.disabled = true;
+
+    const { error } = await supabasecl
+        .from('msgs')
+        .insert({ text: msgtext, room: room });
+
+    sending = false;
+    sendbtn.disabled = false;
+
+    if (error) {
+        alert('Error sending message');
+        msginputevents.value = msgtext;   // give it back so it isn't lost
+        return;
+    }
+    msginputevents.focus();
+}
+
+/* ---------------- image upload ---------------- */
+
+function uploadWaitMs() {
+    let last = 0;
+    try { last = parseInt(localStorage.getItem(LAST_UPLOAD_KEY), 10) || 0; } catch (e) { last = 0; }
+    return UPLOAD_COOLDOWN_MS - (Date.now() - last);
+}
+
+function markUpload() {
+    try { localStorage.setItem(LAST_UPLOAD_KEY, String(Date.now())); } catch (e) {}
+}
+
+async function uploadImage(file) {
+    if (uploading) return;
+
+    if (!file.type || file.type.indexOf('image/') !== 0) {
+        alert('Please choose an image file.');
+        return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+        alert('That image is ' + Math.ceil(file.size / 1024) + ' kB. The limit is 100 kB.');
+        return;
+    }
+    const wait = uploadWaitMs();
+    if (wait > 0) {
+        alert('Rate limited. Try again in ' + Math.ceil(wait / 1000) + ' seconds.');
+        return;
+    }
+
+    uploading = true;
+    imgbtn.disabled = true;
+
+    let ext = '';
+    const extMatch = /\.([a-z0-9]+)$/i.exec(file.name || '');
+    if (extMatch) ext = extMatch[1].toLowerCase();
+    if (!/^(png|jpe?g|gif|webp|bmp|svg|avif)$/.test(ext)) {
+        ext = (file.type.split('/')[1] || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+    }
+
+    const path = room + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 10) + '.' + ext;
+
+    const up = await supabasecl.storage.from('images').upload(path, file, {
+        contentType: file.type,
+        cacheControl: '31536000',
+        upsert: false
+    });
+
+    if (up.error) {
+        uploading = false;
+        imgbtn.disabled = false;
+        alert('Upload failed: ' + up.error.message);
+        return;
+    }
+
+    const pub = supabasecl.storage.from('images').getPublicUrl(path);
+    const url = (pub && pub.data) ? pub.data.publicUrl : null;
+
+    if (!url) {
+        uploading = false;
+        imgbtn.disabled = false;
+        alert('Upload failed: no public URL returned.');
+        return;
+    }
+
+    const { error } = await supabasecl
+        .from('msgs')
+        .insert({ text: url, room: room });
+
+    uploading = false;
+    imgbtn.disabled = false;
+
+    if (error) {
+        alert('Image uploaded, but the message could not be sent.');
+        return;
+    }
+    markUpload();
+}
+
+/* ---------------- wiring ---------------- */
+
+rcinputevents.addEventListener('input', function () {
+    rcinputevents.value = rcinputevents.value.toUpperCase().replace(/[^A-Z]/g, '');
+});
+
+msginputevents.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendmsg();
+    }
+});
+
+sendbtn.addEventListener('click', sendmsg);
+
+imgbtn.addEventListener('click', function () { fileinput.click(); });
+
+fileinput.addEventListener('change', function () {
+    const f = fileinput.files && fileinput.files[0];
+    fileinput.value = '';           // allow re-picking the same file
+    if (f) uploadImage(f);
+});
+
+roomform.addEventListener('submit', function (event) {
+    event.preventDefault();
+    const code = rcinputevents.value;
+    if (code.length !== 4) {
+        alert('Room code must be 4 letters (A-Z).');
+        return;
+    }
+    room = code;
+    roomtext.textContent = 'Chat room ' + room;
     loadmsgs(room);
     stroom(room);
-    rcinputevents.addEventListener('input', () => {rcinputevents.value = rcinputevents.value.toUpperCase().replace(/[^A-Z]/g, '');});
-    msginputevents.addEventListener('input', () => {msginputevents.value = msginputevents.value.replace(/<(?!br\s*\/?)[^>]+>/gi, '');});
-    sb.addEventListener('submit', (event) => {
-        if (rcinputevents.value.length != 4) {
-            alert('Error');
-            return;
-        }
-        event.preventDefault();
-        room = rcinputevents.value;
-        loadmsgs(room);
-        stroom(room);
-        document.getElementById('roomtext').textContent = `Chat room ${room}`;});
+});
+
+loadmsgs(room);
+stroom(room);
 </script>
 </body>
 </html>
